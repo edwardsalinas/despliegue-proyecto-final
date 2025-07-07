@@ -33,7 +33,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           # Contexto para el build (la carpeta del backend)
-          context: ./backend
+          context: ./10-calendar-backend
           # Empuja la imagen al registro después de construirla
           push: true
           # Define el nombre y la etiqueta de la imagen
@@ -62,7 +62,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           # Contexto para el build (la carpeta del frontend)
-          context: ./frontend
+          context: ./10-calendar
           # Empuja la imagen al registro
           push: true
           # Define el nombre y la etiqueta de la imagen
