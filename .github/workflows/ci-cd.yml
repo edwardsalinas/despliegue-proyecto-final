@@ -1,7 +1,4 @@
-# .github/workflows/ci-cd.yml
-# Re-introduciendo el paso de depuración para diagnóstico.
-
-name: CI/CD - Build and Push Docker Images
+name: CI/CD - Test, Build, and Push Docker Images
 
 on:
   push:
@@ -9,17 +6,42 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Job para construir y publicar la imagen del Backend
-  build-and-push-backend:
+  # Job para ejecutar las pruebas
+  run-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # --- PASO DE DEPURACIÓN ---
-      # Este paso listará todos los archivos y carpetas para verificar las rutas.
-      - name: List files in the repository
-        run: ls -R
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies and run tests
+        # Nos movemos al directorio del backend para ejecutar los comandos
+        working-directory: ./10-calendar-backend
+        run: |
+          npm install
+          # Asegúrate de tener un script "test" en tu package.json del backend
+          npm test
+
+      - name: Install frontend dependencies and run tests
+        # Nos movemos al directorio del frontend para ejecutar los comandos
+        working-directory: ./10-calendar
+        run: |
+          npm install
+          # El comando 'npm test -- --watchAll=false' ejecuta Jest una vez sin modo de espera
+          npm test -- --watchAll=false
+
+  # Job para construir y publicar la imagen del Backend
+  build-and-push-backend:
+    # Este job ahora necesita que el job 'run-tests' termine exitosamente
+    needs: run-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -31,13 +53,15 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./10-calendar-backend
+          file: ./10-calendar-backend/Dockerfile
           push: true
           tags: edwardsalinas/calendar-backend:latest
 
   # Job para construir y publicar la imagen del Frontend
   build-and-push-frontend:
-    runs-on: ubuntu-latest
+    # La cadena de dependencias se mantiene: frontend depende de backend, que a su vez depende de las pruebas
     needs: build-and-push-backend
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -52,5 +76,6 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./10-calendar
+          file: ./10-calendar/Dockerfile
           push: true
           tags: edwardsalinas/calendar-frontend:latest
