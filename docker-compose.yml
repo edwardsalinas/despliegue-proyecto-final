@@ -4,7 +4,7 @@
 version: '3.8'
 
 services:
-  # Servicio para el Backend
+  # Servicio para el Backend test
   backend:
     # Construye la imagen usando el Dockerfile que está en la carpeta ./backend
     build: ./10-calendar-backend
