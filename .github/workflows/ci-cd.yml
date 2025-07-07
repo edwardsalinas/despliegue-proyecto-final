@@ -3,7 +3,7 @@
 
 name: CI/CD - Build and Push Docker Images
 
-# Define cuándo se ejecutará el workflow
+# Define cuándo se ejecutará el workflow test
 on:
   push:
     # Se ejecuta solo en pushes a la rama 'main'
