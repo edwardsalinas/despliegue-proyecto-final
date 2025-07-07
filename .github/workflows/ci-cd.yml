@@ -14,11 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # --- CORRECCIÓN AQUÍ ---
-      # Añadimos la opción para clonar el contenido de los submódulos
+      # Eliminamos la opción de submódulos para tratar las carpetas como directorios normales.
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          submodules: 'recursive'
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -41,11 +39,9 @@ jobs:
     needs: build-and-push-backend
     steps:
       # --- CORRECCIÓN AQUÍ ---
-      # Añadimos la opción para clonar el contenido de los submódulos
+      # Eliminamos la opción de submódulos.
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          submodules: 'recursive'
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
