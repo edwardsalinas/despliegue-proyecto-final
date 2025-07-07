@@ -34,6 +34,7 @@ jobs:
         with:
           # Contexto para el build (la carpeta del backend)
           context: ./10-calendar-backend
+          file: ./10-calendar-backend/dockerfile
           # Empuja la imagen al registro después de construirla
           push: true
           # Define el nombre y la etiqueta de la imagen
@@ -63,6 +64,8 @@ jobs:
         with:
           # Contexto para el build (la carpeta del frontend)
           context: ./10-calendar
+
+          file: ./10-calendar/dockerfile
           # Empuja la imagen al registro
           push: true
           # Define el nombre y la etiqueta de la imagen
