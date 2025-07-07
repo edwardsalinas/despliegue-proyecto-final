@@ -1,0 +1,36 @@
+# Dockerfile para el Frontend (React) - Usando Multi-stage build
+
+# --- Etapa 1: Build ---
+# Esta etapa se encarga de construir la aplicación de React
+FROM node:20-alpine AS build
+
+# Establecemos el directorio de trabajo
+WORKDIR /app
+
+# Copiamos los archivos de dependencias
+COPY package*.json ./
+
+# Instalamos todas las dependencias (incluyendo devDependencies para el build)
+RUN npm install
+
+# Copiamos el resto del código fuente del frontend
+COPY . .
+
+# Ejecutamos el script de build para generar los archivos estáticos
+RUN npm run build
+
+# --- Etapa 2: Producción ---
+# Esta etapa se encarga de servir los archivos estáticos con un servidor ligero
+FROM nginx:stable-alpine
+
+# Copiamos los archivos estáticos construidos en la etapa anterior
+# La carpeta de build de Vite se llama 'dist' por defecto
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Copiamos nuestra configuración personalizada de Nginx
+# Esto es crucial para que el enrutamiento del lado del cliente (React Router) funcione
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Exponemos el puerto 80, que es el puerto por defecto de Nginx
+EXPOSE 80
+

@@ -1,0 +1,69 @@
+# .github/workflows/ci-cd.yml
+# Este workflow de GitHub Actions se encarga de construir y publicar las imágenes Docker.
+
+name: CI/CD - Build and Push Docker Images
+
+# Define cuándo se ejecutará el workflow
+on:
+  push:
+    # Se ejecuta solo en pushes a la rama 'main'
+    branches: [ "main" ]
+  # Permite ejecutar este workflow manualmente desde la pestaña Actions de GitHub
+  workflow_dispatch:
+
+jobs:
+  # Job para construir y publicar la imagen del Backend
+  build-and-push-backend:
+    # El tipo de máquina en la que se ejecutará el job
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Clona el código del repositorio
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Inicia sesión en Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 3. Construye y publica la imagen Docker del backend
+      - name: Build and push backend image
+        uses: docker/build-push-action@v4
+        with:
+          # Contexto para el build (la carpeta del backend)
+          context: ./backend
+          # Empuja la imagen al registro después de construirla
+          push: true
+          # Define el nombre y la etiqueta de la imagen
+          tags: edwardsalinas/calendar-backend:latest
+
+  # Job para construir y publicar la imagen del Frontend
+  build-and-push-frontend:
+    # Se ejecuta en una máquina de ubuntu
+    runs-on: ubuntu-latest
+    # Define que este job debe esperar a que 'build-and-push-backend' termine exitosamente
+    needs: build-and-push-backend
+    steps:
+      # 1. Clona el código del repositorio
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Inicia sesión en Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 3. Construye y publica la imagen Docker del frontend
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v4
+        with:
+          # Contexto para el build (la carpeta del frontend)
+          context: ./frontend
+          # Empuja la imagen al registro
+          push: true
+          # Define el nombre y la etiqueta de la imagen
+          tags: edwardsalinas/calendar-frontend:latest
