@@ -64,7 +64,6 @@ jobs:
         with:
           # Contexto para el build (la carpeta del frontend)
           context: ./10-calendar
-
           file: ./10-calendar/dockerfile
           # Empuja la imagen al registro
           push: true
