@@ -1,5 +1,5 @@
 # .github/workflows/ci-cd.yml
-# Simplificado para usar el nombre de archivo estándar 'Dockerfile'
+# Re-introduciendo el paso de depuración para diagnóstico.
 
 name: CI/CD - Build and Push Docker Images
 
@@ -13,10 +13,13 @@ jobs:
   build-and-push-backend:
     runs-on: ubuntu-latest
     steps:
-      # --- CORRECCIÓN AQUÍ ---
-      # Eliminamos la opción de submódulos para tratar las carpetas como directorios normales.
       - name: Checkout code
         uses: actions/checkout@v3
+
+      # --- PASO DE DEPURACIÓN ---
+      # Este paso listará todos los archivos y carpetas para verificar las rutas.
+      - name: List files in the repository
+        run: ls -R
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -27,8 +30,6 @@ jobs:
       - name: Build and push backend image
         uses: docker/build-push-action@v4
         with:
-          # El contexto apunta a la carpeta del backend.
-          # La acción buscará 'Dockerfile' dentro de esta carpeta automáticamente.
           context: ./10-calendar-backend
           push: true
           tags: edwardsalinas/calendar-backend:latest
@@ -38,8 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push-backend
     steps:
-      # --- CORRECCIÓN AQUÍ ---
-      # Eliminamos la opción de submódulos.
       - name: Checkout code
         uses: actions/checkout@v3
 
@@ -52,8 +51,6 @@ jobs:
       - name: Build and push frontend image
         uses: docker/build-push-action@v4
         with:
-          # El contexto apunta a la carpeta del frontend.
-          # La acción buscará 'Dockerfile' dentro de esta carpeta automáticamente.
           context: ./10-calendar
           push: true
           tags: edwardsalinas/calendar-frontend:latest
