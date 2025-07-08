@@ -30,7 +30,7 @@ jobs:
         run: yarn test --watchAll=false
 
   # --- Job 2: Construir y Publicar Imágenes ---
-  # Este job ahora etiqueta las imágenes según el ambiente.
+  # Este job ahora etiqueta las imágenes según el ambiente test.
   build-and-push:
     needs: run-tests
     runs-on: ubuntu-latest
