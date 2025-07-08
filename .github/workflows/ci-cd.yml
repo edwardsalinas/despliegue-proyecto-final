@@ -31,7 +31,7 @@ jobs:
 
   # --- Job 2: Construir y Publicar Imágenes ---
   # Este job ahora etiqueta las imágenes según el ambiente test.
-  build-and-push:
+  build-backend-image:
     needs: run-tests
     runs-on: ubuntu-latest
     outputs:
@@ -69,6 +69,37 @@ jobs:
           push: true
           tags: edwardsalinas/calendar-backend:${{ steps.image_tag.outputs.tag }}
 
+  build-frontend-image:
+    needs: run-tests
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.image_tag.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine Image Tag
+        id: image_tag
+        run: |
+          if [[ $GITHUB_REF == refs/heads/develop ]]; then
+            echo "tag=dev" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == refs/heads/main ]]; then
+            echo "tag=qa" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
@@ -77,24 +108,40 @@ jobs:
           tags: edwardsalinas/calendar-frontend:${{ steps.image_tag.outputs.tag }}
 
   # --- Job 3: Desplegar a los Ambientes ---
-  deploy:
-    needs: build-and-push
-    # Se define el ambiente de GitHub Actions a usar. Esto nos da acceso a los secrets de ese ambiente.
+  deploy-backend:
+    needs: build-backend-image
     environment:
       name: ${{ (github.ref == 'refs/heads/develop' && 'development') || (github.ref == 'refs/heads/main' && 'qa') || 'production' }}
       url: https://myapp.com # URL del ambiente desplegado (opcional)
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Environment
-        # Este es un paso conceptual. Aquí usarías una action para SSH o un webhook.
-        # La idea es ejecutar los comandos en tu servidor remoto.
+      - name: Deploy Backend to Environment
         run: |
-          echo "Deploying tag: ${{ needs.build-and-push.outputs.image_tag }} to ${{ job.environment.name }}"
-          echo "--- Simulating deployment ---"
+          echo "Deploying backend tag: ${{ needs.build-backend-image.outputs.image_tag }} to ${{ job.environment.name }}"
+          echo "--- Simulating backend deployment ---"
           echo "1. SSH into server (not shown)"
-          echo "2. Create .env file from GitHub Secret"
-          echo "   echo \"${{ secrets.DOTENV_FILE }}\" > 10-calendar-backend/.env"
-          echo "3. Update docker-compose.yml to use the new image tag: ${{ needs.build-and-push.outputs.image_tag }}"
-          echo "4. Run docker-compose pull"
-          echo "5. Run docker-compose up -d"
-          echo "Deployment simulation complete."
+          echo "2. Create .env file from GitHub Secret for backend"
+          echo "   echo \"${{ secrets.DOTENV_FILE_BACKEND }}\" > 10-calendar-backend/.env"
+          echo "3. Update docker-compose.yml to use the new backend image tag: ${{ needs.build-backend-image.outputs.image_tag }}"
+          echo "4. Run docker-compose pull backend"
+          echo "5. Run docker-compose up -d backend"
+          echo "Backend deployment simulation complete."
+
+  deploy-frontend:
+    needs: build-frontend-image
+    environment:
+      name: ${{ (github.ref == 'refs/heads/develop' && 'development') || (github.ref == 'refs/heads/main' && 'qa') || 'production' }}
+      url: https://myapp.com # URL del ambiente desplegado (opcional)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Frontend to Environment
+        run: |
+          echo "Deploying frontend tag: ${{ needs.build-frontend-image.outputs.image_tag }} to ${{ job.environment.name }}"
+          echo "--- Simulating frontend deployment ---"
+          echo "1. SSH into server (not shown)"
+          echo "2. Create .env file from GitHub Secret for frontend"
+          echo "   echo \"${{ secrets.DOTENV_FILE_FRONTEND }}\" > 10-calendar/.env"
+          echo "3. Update docker-compose.yml to use the new frontend image tag: ${{ needs.build-frontend-image.outputs.image_tag }}"
+          echo "4. Run docker-compose pull frontend"
+          echo "5. Run docker-compose up -d frontend"
+          echo "Frontend deployment simulation complete."
