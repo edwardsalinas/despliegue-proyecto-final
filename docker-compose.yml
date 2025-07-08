@@ -1,28 +1,22 @@
-# docker-compose.yml
-# Este archivo orquesta los contenedores del backend y el frontend para el desarrollo local.
-
 version: '3.8'
 
 services:
-  # Servicio para el Backend test
   backend:
-    # Construye la imagen usando el Dockerfile que está en la carpeta ./backend
+    # Construye la imagen usando el Dockerfile que está en la carpeta ./10-calendar-backend
     build: ./10-calendar-backend
-    # Asigna un nombre al contenedor para identificarlo fácilmente
+    # Asigna un nombre al contenedor
     container_name: calendar-backend
     # Mapea el puerto 4000 del contenedor al puerto 4000 de la máquina host
     ports:
       - "4000:4000"
-    # Carga las variables de entorno desde un archivo .env en la carpeta del backend
-    # Debes crear este archivo para tus variables (DB_CNN, SECRET_JWT_SEED, etc.)
-    env_file:
-      - ./10-calendar-backend/.env
     # Reinicia el contenedor automáticamente si falla
     restart: unless-stopped
+    # Carga las variables de entorno desde el archivo .env
+    env_file:
+      - ./10-calendar-backend/.env
 
-  # Servicio para el Frontend
   frontend:
-    # Construye la imagen usando el Dockerfile que está en la carpeta ./frontend
+    # Construye la imagen usando el Dockerfile que está en la carpeta ./10-calendar
     build: ./10-calendar
     # Asigna un nombre al contenedor
     container_name: calendar-frontend

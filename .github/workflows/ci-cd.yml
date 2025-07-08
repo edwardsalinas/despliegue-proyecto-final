@@ -1,83 +1,100 @@
 # .github/workflows/ci-cd.yml
-# Actualizado para usar YARN y omitir temporalmente las pruebas de integración.
+# Pipeline de CI/CD con despliegue a ambientes DEV, QA y PROD.
 
-name: CI/CD - Test, Build, and Push Docker Images
+name: CI/CD - Test, Build, and Deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "develop" ] # Se activa con pushes a main y develop
+    tags:
+      - 'v*' # Se activa al crear tags que empiecen con 'v' (ej. v1.0.0)
   workflow_dispatch:
 
 jobs:
-  # Job para ejecutar las pruebas
+  # --- Job 1: Ejecutar Pruebas (Sin cambios) ---
   run-tests:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       - name: Install backend dependencies
         working-directory: ./10-calendar-backend
-        run: |
-          npm install
-          # Se omite 'npm test' ya que no existe en el package.json del backend.
-
-      - name: Install frontend dependencies and run tests with Yarn
-        # Nos movemos al directorio del frontend para ejecutar los comandos
+        run: npm install
+      - name: Install frontend dependencies
         working-directory: ./10-calendar
-        run: |
-          yarn install
-          # --- CORRECCIÓN AQUÍ ---
-          # Se ignoran las pruebas en las carpetas 'hooks' y 'api' porque fallan al no
-          # tener un backend disponible. La solución ideal a largo plazo es usar "API Mocking"
-          # en esas pruebas para simular las respuestas del backend.
-          yarn test --watchAll=false --testPathIgnorePatterns=hooks api
+        run: yarn install
+      - name: Run frontend tests
+        working-directory: ./10-calendar
+        run: yarn test --watchAll=false
 
-  # Job para construir y publicar la imagen del Backend
-  build-and-push-backend:
+  # --- Job 2: Construir y Publicar Imágenes ---
+  # Este job ahora etiqueta las imágenes según el ambiente.
+  build-and-push:
     needs: run-tests
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.image_tag.outputs.tag }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Determine Image Tag
+        id: image_tag
+        run: |
+          if [[ $GITHUB_REF == refs/heads/develop ]]; then
+            echo "tag=dev" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == refs/heads/main ]]; then
+            echo "tag=qa" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./10-calendar-backend
-          file: ./10-calendar-backend/Dockerfile
           push: true
-          tags: edwardsalinas/calendar-backend:latest
-
-  # Job para construir y publicar la imagen del Frontend
-  build-and-push-frontend:
-    needs: build-and-push-backend
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          tags: edwardsalinas/calendar-backend:${{ steps.image_tag.outputs.tag }}
 
       - name: Build and push frontend image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./10-calendar
-          file: ./10-calendar/Dockerfile
           push: true
-          tags: edwardsalinas/calendar-frontend:latest
+          tags: edwardsalinas/calendar-frontend:${{ steps.image_tag.outputs.tag }}
+
+  # --- Job 3: Desplegar a los Ambientes ---
+  deploy:
+    needs: build-and-push
+    # Se define el ambiente de GitHub Actions a usar. Esto nos da acceso a los secrets de ese ambiente.
+    environment:
+      name: ${{ (github.ref == 'refs/heads/develop' && 'development') || (github.ref == 'refs/heads/main' && 'qa') || 'production' }}
+      url: https://myapp.com # URL del ambiente desplegado (opcional)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Environment
+        # Este es un paso conceptual. Aquí usarías una action para SSH o un webhook.
+        # La idea es ejecutar los comandos en tu servidor remoto.
+        run: |
+          echo "Deploying tag: ${{ needs.build-and-push.outputs.image_tag }} to ${{ job.environment.name }}"
+          echo "--- Simulating deployment ---"
+          echo "1. SSH into server (not shown)"
+          echo "2. Create .env file from GitHub Secret"
+          echo "   echo \"${{ secrets.DOTENV_FILE }}\" > 10-calendar-backend/.env"
+          echo "3. Update docker-compose.yml to use the new image tag: ${{ needs.build-and-push.outputs.image_tag }}"
+          echo "4. Run docker-compose pull"
+          echo "5. Run docker-compose up -d"
+          echo "Deployment simulation complete."

@@ -14,7 +14,7 @@ COPY package*.json ./
 # --- Etapa 2: Dependencias de Producción ---
 # Instalamos solo las dependencias necesarias para producción
 FROM base AS production-deps
-RUN npm install --only=production
+RUN npm install --omit=dev
 
 # --- Etapa 3: Build Final de Producción ---
 FROM base AS production
@@ -23,9 +23,9 @@ COPY --from=production-deps /app/node_modules ./node_modules
 # Copiamos el resto del código de la aplicación
 COPY . .
 
-# Exponemos el puerto en el que corre la aplicación Express
-# Asegúrate de que tu app en index.js use este puerto (o cámbialo aquí)
+# Exponemos el puerto en el que corre la aplicación Express (usaremos el 4000 como ejemplo)
+# Asegúrate de que tu app en index.js use este puerto, o cámbialo aquí.
 EXPOSE 4000
 
-# El comando para iniciar la aplicación cuando el contenedor se ejecute
+# Comando para iniciar la aplicación en producción
 CMD [ "node", "index.js" ]
