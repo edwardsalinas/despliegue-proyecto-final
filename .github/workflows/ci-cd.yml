@@ -12,7 +12,7 @@ on:
 
 jobs:
   # --- Job 1: Ejecutar Pruebas (Sin cambios) ---
-  run-tests:
+  run-backend-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +22,17 @@ jobs:
       - name: Install backend dependencies
         working-directory: ./10-calendar-backend
         run: npm install
+      - name: Run backend tests
+        working-directory: ./10-calendar-backend
+        run: npm test
+
+  run-frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Install frontend dependencies
         working-directory: ./10-calendar
         run: yarn install
@@ -32,7 +43,7 @@ jobs:
   # --- Job 2: Construir y Publicar Imágenes ---
   # Este job ahora etiqueta las imágenes según el ambiente test.
   build-backend-image:
-    needs: run-tests
+    needs: run-backend-tests
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.image_tag.outputs.tag }}
@@ -70,7 +81,7 @@ jobs:
           tags: edwardsalinas/calendar-backend:${{ steps.image_tag.outputs.tag }}
 
   build-frontend-image:
-    needs: run-tests
+    needs: run-frontend-tests
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.image_tag.outputs.tag }}
