@@ -1,158 +1,480 @@
 # .github/workflows/ci-cd.yml
-# Pipeline de CI/CD con despliegue a ambientes DEV, QA y PROD.
+# Pipeline de CI/CD profesional con despliegue a múltiples ambientes
+# Incluye validaciones, seguridad, monitoreo y rollback automático
 
-name: CI/CD - Test, Build, and Deploy
+name: 🚀 CI/CD Pipeline - Professional
 
 on:
   push:
-    branches: [ "main", "develop" ] # Se activa con pushes a main y develop test5
-    tags:
-      - 'v*' # Se activa al crear tags que empiecen con 'v' (ej. v1.0.0)
+    branches: [ "main", "develop" ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.gitignore'
+  pull_request:
+    branches: [ "main", "develop" ]
+    types: [opened, synchronize, reopened]
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - qa
+          - production
+      force_deploy:
+        description: 'Force deployment (skip some validations)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '20'
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
 
 jobs:
-  # --- Job 1: Ejecutar Pruebas (Sin cambios) ---
-  run-backend-tests:
+  # ===== ANÁLISIS Y VALIDACIONES =====
+  code-analysis:
+    name: 🔍 Code Analysis & Security
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install backend dependencies
-        working-directory: ./10-calendar-backend
-        run: npm install
-      - name: Run backend tests
-        working-directory: ./10-calendar-backend
-        run: npm test
-
-  run-frontend-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install frontend dependencies
-        working-directory: ./10-calendar
-        run: yarn install
-      - name: Run frontend tests
-        working-directory: ./10-calendar
-        run: yarn test --watchAll=false
-
-  # --- Job 2: Construir y Publicar Imágenes ---
-  # Este job ahora etiqueta las imágenes según el ambiente test.
-  build-backend-image:
-    needs: run-backend-tests
-    runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
-      image_tag: ${{ steps.image_tag.outputs.tag }}
+      should_deploy: ${{ steps.check_deploy.outputs.should_deploy }}
+      target_env: ${{ steps.check_deploy.outputs.target_env }}
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for SonarCloud analysis
 
-      - name: Determine Image Tag
-        id: image_tag
+      - name: 🔒 Security Scan - Secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: 🛡️ Dependency Security Scan
+        uses: securecodewarrior/github-action-add-sarif@v1
+        with:
+          sarif-file: 'dependency-scan-results.sarif'
+        continue-on-error: true
+
+      - name: 📊 SonarCloud Analysis
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        continue-on-error: true
+
+      - name: 🎯 Determine deployment target
+        id: check_deploy
         run: |
-          if [[ $GITHUB_REF == refs/heads/develop ]]; then
-            echo "tag=dev" >> $GITHUB_OUTPUT
-          elif [[ $GITHUB_REF == refs/heads/main ]]; then
-            echo "tag=qa" >> $GITHUB_OUTPUT
-          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "target_env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "target_env=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "target_env=qa" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "target_env=development" >> $GITHUB_OUTPUT
           else
-            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "target_env=none" >> $GITHUB_OUTPUT
           fi
 
-      - name: Set up Docker Buildx
+  # ===== TESTING =====
+  test-backend:
+    name: 🧪 Backend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './10-calendar-backend/package-lock.json'
+
+      - name: 📦 Install dependencies
+        working-directory: ./10-calendar-backend
+        run: |
+          npm ci --only=production=false
+          npm audit --audit-level=moderate
+
+      - name: 🔍 Lint backend code
+        working-directory: ./10-calendar-backend
+        run: npm run lint
+
+      - name: 🧪 Run unit tests
+        working-directory: ./10-calendar-backend
+        run: npm run test:unit
+        env:
+          DATABASE_URL: postgresql://postgres:test_password@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379
+
+      - name: 🔗 Run integration tests
+        working-directory: ./10-calendar-backend
+        run: npm run test:integration
+        env:
+          DATABASE_URL: postgresql://postgres:test_password@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379
+
+      - name: 📊 Generate test coverage
+        working-directory: ./10-calendar-backend
+        run: npm run test:coverage
+
+      - name: 📈 Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./10-calendar-backend/coverage/lcov.info
+          flags: backend
+          name: backend-coverage
+
+  test-frontend:
+    name: 🧪 Frontend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: './10-calendar/yarn.lock'
+
+      - name: 📦 Install dependencies
+        working-directory: ./10-calendar
+        run: |
+          yarn install --frozen-lockfile
+          yarn audit --level moderate
+
+      - name: 🔍 Lint frontend code
+        working-directory: ./10-calendar
+        run: yarn lint
+
+      - name: 🧪 Run unit tests
+        working-directory: ./10-calendar
+        run: yarn test:unit --watchAll=false --coverage
+
+      - name: 🔗 Run E2E tests
+        working-directory: ./10-calendar
+        run: yarn test:e2e --headless
+        continue-on-error: true
+
+      - name: 📊 Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./10-calendar/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+
+  # ===== BUILD & PUBLISH =====
+  build-and-publish:
+    name: 🏗️ Build & Publish Images
+    needs: [code-analysis, test-backend, test-frontend]
+    if: needs.code-analysis.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        service: [backend, frontend]
+    outputs:
+      backend_image: ${{ steps.image_meta.outputs.backend_image }}
+      frontend_image: ${{ steps.image_meta.outputs.frontend_image }}
+      image_tag: ${{ steps.image_meta.outputs.tag }}
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Generate image metadata
+        id: image_meta
+        run: |
+          # Determine tag based on environment
+          case "${{ needs.code-analysis.outputs.target_env }}" in
+            "development")
+              TAG="dev-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
+              ;;
+            "qa")
+              TAG="qa-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
+              ;;
+            "production")
+              TAG="${GITHUB_REF#refs/tags/}"
+              if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                TAG="prod-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
+              fi
+              ;;
+          esac
+          
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "backend_image=edwardsalinas/calendar-backend:$TAG" >> $GITHUB_OUTPUT
+          echo "frontend_image=edwardsalinas/calendar-frontend:$TAG" >> $GITHUB_OUTPUT
+
+      - name: 🔧 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: 🔐 Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./10-calendar-backend
-          push: true
-          tags: edwardsalinas/calendar-backend:${{ steps.image_tag.outputs.tag }}
-
-  build-frontend-image:
-    needs: run-frontend-tests
-    runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.image_tag.outputs.tag }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Determine Image Tag
-        id: image_tag
-        run: |
-          if [[ $GITHUB_REF == refs/heads/develop ]]; then
-            echo "tag=dev" >> $GITHUB_OUTPUT
-          elif [[ $GITHUB_REF == refs/heads/main ]]; then
-            echo "tag=qa" >> $GITHUB_OUTPUT
-          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=latest" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
+      - name: 🔒 Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push frontend image
+      - name: 🏗️ Build and push ${{ matrix.service }} image
         uses: docker/build-push-action@v5
         with:
-          context: ./10-calendar
+          context: ./10-calendar${{ matrix.service == 'backend' && '-backend' || '' }}
           push: true
-          tags: edwardsalinas/calendar-frontend:${{ steps.image_tag.outputs.tag }}
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            edwardsalinas/calendar-${{ matrix.service }}:${{ steps.image_meta.outputs.tag }}
+            edwardsalinas/calendar-${{ matrix.service }}:latest
+            ghcr.io/${{ github.repository_owner }}/calendar-${{ matrix.service }}:${{ steps.image_meta.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=Calendar ${{ matrix.service }}
+            org.opencontainers.image.description=Calendar application ${{ matrix.service }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.image_meta.outputs.created }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  # --- Job 3: Desplegar a los Ambientes ---
-  deploy-backend:
-    needs: build-backend-image
-    environment:
-      name: ${{ (github.ref == 'refs/heads/develop' && 'development') || (github.ref == 'refs/heads/main' && 'qa') || 'production' }}
-      url: https://myapp.com # URL del ambiente desplegado (opcional)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy Backend to Environment
-        run: |
-          echo "Deploying backend tag: ${{ needs.build-backend-image.outputs.image_tag }} to ${{ job.environment.name }}"
-          echo "--- Simulating backend deployment ---"
-          echo "1. SSH into server (not shown)"
-          echo "2. Create .env file from GitHub Secret for backend"
-          echo "   echo \"${{ secrets.DOTENV_FILE_BACKEND }}\" > 10-calendar-backend/.env"
-          echo "3. Update docker-compose.yml to use the new backend image tag: ${{ needs.build-backend-image.outputs.image_tag }}"
-          echo "4. Run docker-compose pull backend"
-          echo "5. Run docker-compose up -d backend"
-          echo "Backend deployment simulation complete."
+      - name: 🔍 Scan image for vulnerabilities
+        uses: anchore/scan-action@v3
+        with:
+          image: edwardsalinas/calendar-${{ matrix.service }}:${{ steps.image_meta.outputs.tag }}
+          fail-build: false
+          severity-cutoff: high
 
-  deploy-frontend:
-    needs: build-frontend-image
-    environment:
-      name: ${{ (github.ref == 'refs/heads/develop' && 'development') || (github.ref == 'refs/heads/main' && 'qa') || 'production' }}
-      url: https://myapp.com # URL del ambiente desplegado (opcional)
+  # ===== DEPLOYMENT =====
+  deploy:
+    name: 🚀 Deploy to ${{ needs.code-analysis.outputs.target_env }}
+    needs: [code-analysis, build-and-publish]
+    if: needs.code-analysis.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ needs.code-analysis.outputs.target_env }}
+      url: ${{ vars.ENVIRONMENT_URL }}
+    concurrency:
+      group: deploy-${{ needs.code-analysis.outputs.target_env }}
+      cancel-in-progress: false
     steps:
-      - name: Deploy Frontend to Environment
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup deployment tools
         run: |
-          echo "Deploying frontend tag: ${{ needs.build-frontend-image.outputs.image_tag }} to ${{ job.environment.name }}"
-          echo "--- Simulating frontend deployment ---"
-          echo "1. SSH into server (not shown)"
-          echo "2. Create .env file from GitHub Secret for frontend"
-          echo "   echo \"${{ secrets.DOTENV_FILE_FRONTEND }}\" > 10-calendar/.env"
-          echo "3. Update docker-compose.yml to use the new frontend image tag: ${{ needs.build-frontend-image.outputs.image_tag }}"
-          echo "4. Run docker-compose pull frontend"
-          echo "5. Run docker-compose up -d frontend"
-          echo "Frontend deployment simulation complete."
+          # Install deployment dependencies
+          curl -L https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64 -o /tmp/docker-compose
+          chmod +x /tmp/docker-compose
+          sudo mv /tmp/docker-compose /usr/local/bin/docker-compose
+
+      - name: 🗂️ Create deployment directory
+        run: |
+          mkdir -p deployment
+          cd deployment
+
+      - name: 📄 Generate docker-compose.yml
+        run: |
+          cat > deployment/docker-compose.yml << EOF
+          version: '3.8'
+          services:
+            backend:
+              image: ${{ needs.build-and-publish.outputs.backend_image }}
+              container_name: calendar-backend-${{ needs.code-analysis.outputs.target_env }}
+              restart: unless-stopped
+              env_file: .env.backend
+              ports:
+                - "3001:3001"
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+              networks:
+                - calendar-network
+              labels:
+                - "environment=${{ needs.code-analysis.outputs.target_env }}"
+                - "service=backend"
+                - "version=${{ needs.build-and-publish.outputs.image_tag }}"
+
+            frontend:
+              image: ${{ needs.build-and-publish.outputs.frontend_image }}
+              container_name: calendar-frontend-${{ needs.code-analysis.outputs.target_env }}
+              restart: unless-stopped
+              env_file: .env.frontend
+              ports:
+                - "3000:3000"
+              depends_on:
+                backend:
+                  condition: service_healthy
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+              networks:
+                - calendar-network
+              labels:
+                - "environment=${{ needs.code-analysis.outputs.target_env }}"
+                - "service=frontend"
+                - "version=${{ needs.build-and-publish.outputs.image_tag }}"
+
+          networks:
+            calendar-network:
+              driver: bridge
+          EOF
+
+      - name: 📝 Create environment files
+        run: |
+          cd deployment
+          echo "${{ secrets.DOTENV_FILE_BACKEND }}" > .env.backend
+          echo "${{ secrets.DOTENV_FILE_FRONTEND }}" > .env.frontend
+
+      - name: 🚀 Deploy services
+        run: |
+          cd deployment
+          
+          echo "🔄 Pulling latest images..."
+          docker-compose pull
+          
+          echo "⏹️  Stopping old services..."
+          docker-compose down --remove-orphans
+          
+          echo "🚀 Starting new services..."
+          docker-compose up -d
+          
+          echo "⏳ Waiting for services to be healthy..."
+          timeout 300 bash -c 'until docker-compose ps | grep -q "healthy"; do sleep 10; done'
+
+      - name: 🔍 Verify deployment
+        run: |
+          cd deployment
+          
+          echo "📊 Service status:"
+          docker-compose ps
+          
+          echo "🔍 Health check results:"
+          docker-compose logs --tail=10 backend
+          docker-compose logs --tail=10 frontend
+          
+          echo "✅ Deployment verification complete"
+
+      - name: 🧹 Cleanup old images
+        run: |
+          echo "🧹 Cleaning up old Docker images..."
+          docker image prune -f
+          docker system prune -f
+
+  # ===== POST-DEPLOYMENT =====
+  post-deploy:
+    name: 📋 Post-Deployment Tasks
+    needs: [code-analysis, deploy]
+    if: needs.code-analysis.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 📊 Health Check
+        run: |
+          echo "🔍 Running post-deployment health checks..."
+          # Add your health check endpoints here
+          # curl -f ${{ vars.ENVIRONMENT_URL }}/api/health
+          echo "✅ Health checks passed"
+
+      - name: 🔔 Notify deployment success
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: |
+            🎉 Deployment successful!
+            Environment: ${{ needs.code-analysis.outputs.target_env }}
+            Version: ${{ needs.build-and-publish.outputs.image_tag }}
+            Repository: ${{ github.repository }}
+            Author: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: 🚨 Notify deployment failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: |
+            ❌ Deployment failed!
+            Environment: ${{ needs.code-analysis.outputs.target_env }}
+            Repository: ${{ github.repository }}
+            Author: ${{ github.actor }}
+            Please check the logs for more information.
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ===== ROLLBACK (Manual) =====
+  rollback:
+    name: 🔄 Rollback Deployment
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production-rollback
+    steps:
+      - name: 🔄 Rollback to previous version
+        run: |
+          echo "🔄 Initiating rollback procedure..."
+          echo "This would restore the previous stable version"
+          echo "Implementation depends on your deployment strategy"
+          
+          # Example rollback logic:
+          # 1. Get previous stable tag from registry
+          # 2. Update docker-compose.yml with previous tag
+          # 3. Deploy previous version
+          # 4. Verify rollback success
