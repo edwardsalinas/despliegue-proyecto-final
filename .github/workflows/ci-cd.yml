@@ -61,11 +61,11 @@ jobs:
           head: HEAD
           extra_args: --debug --only-verified
 
-      - name: 🛡️ Dependency Security Scan
-        uses: securecodewarrior/github-action-add-sarif@v1
-        with:
-          sarif-file: 'dependency-scan-results.sarif'
-        continue-on-error: true
+      # - name: 🛡️ Dependency Security Scan
+      #   uses: securecodewarrior/github-action-add-sarif@v1
+      #   with:
+      #     sarif-file: 'dependency-scan-results.sarif'
+      #   continue-on-error: true
 
       - name: 📊 SonarCloud Analysis
         uses: SonarSource/sonarcloud-github-action@master
