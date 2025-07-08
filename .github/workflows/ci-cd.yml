@@ -5,7 +5,7 @@ name: CI/CD - Test, Build, and Deploy
 
 on:
   push:
-    branches: [ "main", "develop" ] # Se activa con pushes a main y develop
+    branches: [ "main", "develop" ] # Se activa con pushes a main y develop test1
     tags:
       - 'v*' # Se activa al crear tags que empiecen con 'v' (ej. v1.0.0)
   workflow_dispatch:
