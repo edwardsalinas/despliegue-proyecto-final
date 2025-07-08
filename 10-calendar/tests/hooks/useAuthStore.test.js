@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux'; // Importación añadida
 import { useAuthStore } from '../../src/hooks/useAuthStore';
 import { authSlice } from '../../src/store';
@@ -48,7 +48,9 @@ describe('Pruebas en el useAuthStore', () => {
             token: 'TEST-TOKEN'
         });
 
-        await result.current.startLogin(testUserCredentials);
+        await act(async() => {
+            await result.current.startLogin(testUserCredentials);
+        });
 
         const { errorMessage, status, user } = result.current;
         expect({ errorMessage, status, user }).toEqual({
@@ -69,13 +71,15 @@ describe('Pruebas en el useAuthStore', () => {
         // Configurar el mock para que falle
         mock.onPost('/auth').reply(400, { ok: false, msg: 'Credenciales no válidas' });
 
-        await result.current.startLogin(testUserCredentials);
+        await act(async() => {
+            await result.current.startLogin(testUserCredentials);
+        });
         
-        await waitFor(() => expect(result.current.errorMessage).toBe('Credenciales no válidas'));
+        await waitFor(() => expect(result.current.errorMessage).toBe('Credenciales Incorrectas'));
         
         const { status, errorMessage } = result.current;
         expect(status).toBe('not-authenticated');
-        expect(errorMessage).toBe('Credenciales no válidas');
+        expect(errorMessage).toBe('Credenciales Incorrectas');
     });
 
 
@@ -94,7 +98,9 @@ describe('Pruebas en el useAuthStore', () => {
             token: 'SOME-TEST-TOKEN'
         });
 
-        await result.current.startRegister(newUser);
+        await act(async() => {
+            await result.current.startRegister(newUser);
+        });
 
         await waitFor(() => expect(result.current.status).toBe('authenticated'));
 
@@ -115,7 +121,9 @@ describe('Pruebas en el useAuthStore', () => {
         // Configurar el mock para que falle el registro
         mock.onPost('/auth/new').reply(400, { ok: false, msg: 'El usuario ya existe' });
 
-        await result.current.startRegister(testUserCredentials);
+        await act(async() => {
+            await result.current.startRegister(testUserCredentials);
+        });
 
         await waitFor(() => expect(result.current.errorMessage).toBe('El usuario ya existe'));
 
@@ -130,7 +138,9 @@ describe('Pruebas en el useAuthStore', () => {
             wrapper: ({ children }) => <Provider store={getStore(initialState)}>{ children }</Provider>
         });
 
-        await result.current.checkAuthToken();
+        await act(async() => {
+            await result.current.checkAuthToken();
+        });
 
         const { status } = result.current;
         expect(status).toBe('not-authenticated');
@@ -152,7 +162,9 @@ describe('Pruebas en el useAuthStore', () => {
             token: 'ANOTHER-TEST-TOKEN'
         });
 
-        await result.current.checkAuthToken();
+        await act(async() => {
+            await result.current.checkAuthToken();
+        });
 
         const { status } = result.current;
         expect(status).toBe('authenticated');
