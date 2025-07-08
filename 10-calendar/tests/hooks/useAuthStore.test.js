@@ -1,5 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { renderHook, waitFor } from '@testing-library/react';
+import { Provider } from 'react-redux'; // Importación añadida
 import { useAuthStore } from '../../src/hooks/useAuthStore';
 import { authSlice } from '../../src/store';
 import { initialState } from '../fixtures/authStates';
@@ -18,16 +19,25 @@ describe('Pruebas en el useAuthStore', () => {
         localStorage.clear();
     });
 
+    const getStore = (state) => {
+        return configureStore({
+            reducer: {
+                auth: authSlice.reducer
+            },
+            preloadedState: { auth: state }
+        });
+    }
+
     test('debe de regresar el estado por defecto', () => {
         const { result } = renderHook(() => useAuthStore(), {
-            wrapper: ({ children }) => <Provider store={configureStore({ reducer: { auth: authSlice.reducer }, preloadedState: { auth: initialState } })}>{children}</Provider>
+            wrapper: ({ children }) => <Provider store={getStore(initialState)}>{children}</Provider>
         });
         expect(result.current).toEqual({ ...initialState, startLogin: expect.any(Function), startRegister: expect.any(Function), checkAuthToken: expect.any(Function), startLogout: expect.any(Function) });
     });
 
     test('startLogin debe de realizar el login correctamente', async () => {
         const { result } = renderHook(() => useAuthStore(), {
-            wrapper: ({ children }) => <Provider store={configureStore({ reducer: { auth: authSlice.reducer }, preloadedState: { auth: initialState } })}>{children}</Provider>
+            wrapper: ({ children }) => <Provider store={getStore(initialState)}>{children}</Provider>
         });
 
         // Configurar el mock para la petición de login
@@ -53,7 +63,7 @@ describe('Pruebas en el useAuthStore', () => {
 
     test('startLogin debe de fallar la autenticación', async() => {
         const { result } = renderHook( () => useAuthStore(), {
-            wrapper: ({ children }) => <Provider store={ configureStore({ reducer: { auth: authSlice.reducer }, preloadedState: { auth: initialState } }) }>{ children }</Provider>
+            wrapper: ({ children }) => <Provider store={getStore(initialState)}>{ children }</Provider>
         });
 
         // Configurar el mock para que falle
@@ -73,7 +83,7 @@ describe('Pruebas en el useAuthStore', () => {
 
         const newUser = { email: 'test2@google.com', password: 'testpassword123', name: 'Test User 2' };
         const { result } = renderHook( () => useAuthStore(), {
-            wrapper: ({ children }) => <Provider store={ configureStore({ reducer: { auth: authSlice.reducer }, preloadedState: { auth: initialState } }) }>{ children }</Provider>
+            wrapper: ({ children }) => <Provider store={getStore(initialState)}>{ children }</Provider>
         });
 
         // Configurar el mock para el registro
@@ -99,7 +109,7 @@ describe('Pruebas en el useAuthStore', () => {
 
     test('startRegister debe de fallar la creación', async() => {
         const { result } = renderHook( () => useAuthStore(), {
-            wrapper: ({ children }) => <Provider store={ configureStore({ reducer: { auth: authSlice.reducer }, preloadedState: { auth: initialState } }) }>{ children }</Provider>
+            wrapper: ({ children }) => <Provider store={getStore(initialState)}>{ children }</Provider>
         });
 
         // Configurar el mock para que falle el registro
@@ -117,7 +127,7 @@ describe('Pruebas en el useAuthStore', () => {
 
     test('checkAuthToken debe de fallar si no hay token', async() => {
         const { result } = renderHook( () => useAuthStore(), {
-            wrapper: ({ children }) => <Provider store={ configureStore({ reducer: { auth: authSlice.reducer }, preloadedState: { auth: initialState } }) }>{ children }</Provider>
+            wrapper: ({ children }) => <Provider store={getStore(initialState)}>{ children }</Provider>
         });
 
         await result.current.checkAuthToken();
@@ -131,7 +141,7 @@ describe('Pruebas en el useAuthStore', () => {
         localStorage.setItem('token', 'SOME-TEST-TOKEN');
 
         const { result } = renderHook( () => useAuthStore(), {
-            wrapper: ({ children }) => <Provider store={ configureStore({ reducer: { auth: authSlice.reducer }, preloadedState: { auth: initialState } }) }>{ children }</Provider>
+            wrapper: ({ children }) => <Provider store={getStore(initialState)}>{ children }</Provider>
         });
 
         // Configurar el mock para la renovación del token
