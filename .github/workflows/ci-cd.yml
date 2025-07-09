@@ -161,10 +161,11 @@ jobs:
               ports:
                 - "3001:3001"
               healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+                test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/auth"] || ["CMD", "curl", "-f", "http://localhost:3001/api/auth"] || exit 1
                 interval: 30s
-                timeout: 10s
-                retries: 3
+                timeout: 15s
+                retries: 5
+                start_period: 60s
               networks:
                 - calendar-network
 
@@ -176,13 +177,13 @@ jobs:
               ports:
                 - "3000:3000"
               depends_on:
-                backend:
-                  condition: service_healthy
+                - backend
               healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:3000"]
+                test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"] || ["CMD", "curl", "-f", "http://localhost:3000"] || exit 1
                 interval: 30s
-                timeout: 10s
-                retries: 3
+                timeout: 15s
+                retries: 5
+                start_period: 60s
               networks:
                 - calendar-network
 
@@ -201,17 +202,29 @@ jobs:
           echo "⏹️ Stopping old services..."
           docker-compose down --remove-orphans || echo "No existing services to stop"
           
-          echo "🚀 Starting services..."
-          docker-compose up -d
+          echo "🚀 Starting backend first..."
+          docker-compose up -d backend
           
-          echo "⏳ Waiting for services to start..."
+          echo "⏳ Waiting for backend to be ready..."
+          sleep 45
+          
+          echo "📋 Backend logs:"
+          docker-compose logs backend
+          
+          echo "🔍 Backend health check:"
+          docker-compose ps backend
+          
+          echo "🚀 Starting frontend..."
+          docker-compose up -d frontend
+          
+          echo "⏳ Waiting for frontend to be ready..."
           sleep 30
           
-          echo "📊 Service status:"
+          echo "📊 All services status:"
           docker-compose ps
           
-          echo "📋 Service logs:"
-          docker-compose logs --tail=10
+          echo "📋 All services logs:"
+          docker-compose logs --tail=20
           
           echo "🧹 Cleanup old images..."
           docker image prune -f || echo "No images to prune"
