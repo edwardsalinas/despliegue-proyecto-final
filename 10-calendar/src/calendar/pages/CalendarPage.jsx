@@ -19,7 +19,7 @@ export const CalendarPage = () => {
     localStorage.getItem("lastView") || "week",
   );
 
-  const eventStyleGetter = (event, _start, _end, _isSelected) => {
+  const eventStyleGetter = (event) => {
     // console.log({event, start, end, isSelected});
 
     const isMyEvent = ( user.uid === event.user.id ) || ( user.uid === event.user.uid );
@@ -38,7 +38,7 @@ export const CalendarPage = () => {
   const [currentView, setCurrentView] = useState(lastView || Views.MONTH);
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  const onDoubleClick = (_event) => {
+  const onDoubleClick = () => {
     // console.log({ doubleClick: event });
     openDateModal();
   };

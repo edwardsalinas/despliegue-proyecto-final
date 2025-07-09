@@ -19,7 +19,7 @@ export const useAuthStore = () => {
             
             dispatch( onLogin({ name: data.name, uid: data.uid }) );
 
-        } catch (_error) {
+        } catch {
 
             dispatch( onLogout('Credenciales Incorrectas') );
         }
@@ -37,9 +37,9 @@ export const useAuthStore = () => {
             
 
 
-        } catch (_error) {
+        } catch (error) {
         
-            dispatch( onLogout(_error.response.data?.msg || '---'))
+            dispatch( onLogout(error.response.data?.msg || '---'))
         }
     }
 
@@ -52,7 +52,7 @@ export const useAuthStore = () => {
             localStorage.setItem('token', data.token);
             localStorage.setItem('token-init-date', new Date().getTime() );
             dispatch( onLogin({ name: data.name, uid: data.uid }) );
-        } catch (_error) {
+        } catch {
             localStorage.clear();
             dispatch( onLogout() );
         }
