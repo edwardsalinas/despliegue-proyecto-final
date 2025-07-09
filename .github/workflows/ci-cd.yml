@@ -98,27 +98,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
+      mongodb:
+        image: mongo:7.0
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "mongosh --eval 'db.stats().ok'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
+          - 27017:27017
 
     steps:
       - name: 📥 Checkout code
@@ -145,19 +133,25 @@ jobs:
         working-directory: ./10-calendar-backend
         run: npm run test:unit
         env:
-          DATABASE_URL: postgresql://postgres:test_password@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test
+          DB_CNN: mongodb://localhost:27017/test_db
+          SECRET_JWT_SEED: test-secret-seed
 
       - name: 🔗 Run integration tests
         working-directory: ./10-calendar-backend
         run: npm run test:integration
         env:
-          DATABASE_URL: postgresql://postgres:test_password@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test
+          DB_CNN: mongodb://localhost:27017/test_db
+          SECRET_JWT_SEED: test-secret-seed
 
       - name: 📊 Generate test coverage
         working-directory: ./10-calendar-backend
         run: npm run test:coverage
+        env:
+          NODE_ENV: test
+          DB_CNN: mongodb://localhost:27017/test_db
+          SECRET_JWT_SEED: test-secret-seed
 
       - name: 📈 Upload coverage to Codecov
         uses: codecov/codecov-action@v3

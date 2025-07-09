@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "test": "jest",
-    "test:unit": "jest",
+    "test": "jest --ci --watchAll=false",
+    "test:unit": "jest --ci --watchAll=false",
+    "test:integration": "jest --ci --watchAll=false --testPathPattern=integration",
+    "test:coverage": "jest --ci --watchAll=false --coverage",
     "lint": "eslint ."
   },
   "keywords": [],

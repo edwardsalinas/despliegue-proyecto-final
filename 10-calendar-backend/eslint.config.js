@@ -7,16 +7,24 @@ module.exports = [
   },
   {
     languageOptions: {
-      globals: globals.node
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+        ...globals.browser
+      }
     }
   },
   pluginJs.configs.recommended,
   {
-    files: ["tests/**/*.js", "**/*.test.js", "**/*.spec.js", "jest.setup.js"],
+    files: ["tests/**/*.js", "**/*.test.js", "**/*.spec.js", "jest.setup.js", "**/jest.setup.js"],
     languageOptions: {
       globals: {
         ...globals.node,
         ...globals.jest,
+        global: "writable",
+        require: "readonly",
+        process: "readonly",
+        jest: "readonly"
       },
     },
   },
