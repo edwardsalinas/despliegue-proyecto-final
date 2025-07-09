@@ -200,28 +200,20 @@ jobs:
           flags: frontend
           name: frontend-coverage
 
-  # ===== BUILD & PUBLISH =====
-  build-and-publish:
-    name: 🏗️ Build & Publish Images
-    needs: [code-analysis, test-backend, test-frontend]
+  # ===== GENERATE IMAGE TAG =====
+  generate-tag:
+    name: 🏷️ Generate Image Tag
+    needs: [code-analysis]
     if: needs.code-analysis.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      packages: write
+    timeout-minutes: 5
     outputs:
-      backend_image: ${{ steps.set_outputs.outputs.backend_image }}
-      frontend_image: ${{ steps.set_outputs.outputs.frontend_image }}
-      image_tag: ${{ steps.image_meta.outputs.tag }}
-    strategy:
-      matrix:
-        service: [backend, frontend]
+      image_tag: ${{ steps.generate_tag.outputs.tag }}
+      backend_image: ${{ steps.generate_tag.outputs.backend_image }}
+      frontend_image: ${{ steps.generate_tag.outputs.frontend_image }}
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🏷️ Generate image metadata
-        id: image_meta
+      - name: 🏷️ Generate image tag
+        id: generate_tag
         run: |
           # Determine tag based on environment
           case "${{ needs.code-analysis.outputs.target_env }}" in
@@ -240,7 +232,28 @@ jobs:
           esac
           
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "backend_image=edwardsalinas/calendar-backend:$TAG" >> $GITHUB_OUTPUT
+          echo "frontend_image=edwardsalinas/calendar-frontend:$TAG" >> $GITHUB_OUTPUT
+          
           echo "🏷️ Generated tag: $TAG"
+          echo "📦 Backend image: edwardsalinas/calendar-backend:$TAG"
+          echo "📦 Frontend image: edwardsalinas/calendar-frontend:$TAG"
+
+  # ===== BUILD & PUBLISH =====
+  build-and-publish:
+    name: 🏗️ Build & Publish Images
+    needs: [code-analysis, test-backend, test-frontend, generate-tag]
+    if: needs.code-analysis.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
       - name: 🔧 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -265,38 +278,28 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            edwardsalinas/calendar-${{ matrix.service }}:${{ steps.image_meta.outputs.tag }}
+            edwardsalinas/calendar-${{ matrix.service }}:${{ needs.generate-tag.outputs.image_tag }}
             edwardsalinas/calendar-${{ matrix.service }}:latest
-            ghcr.io/${{ github.repository_owner }}/calendar-${{ matrix.service }}:${{ steps.image_meta.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/calendar-${{ matrix.service }}:${{ needs.generate-tag.outputs.image_tag }}
           labels: |
             org.opencontainers.image.title=Calendar ${{ matrix.service }}
             org.opencontainers.image.description=Calendar application ${{ matrix.service }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ steps.image_meta.outputs.created }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: 🔍 Scan image for vulnerabilities
         uses: anchore/scan-action@v3
         with:
-          image: edwardsalinas/calendar-${{ matrix.service }}:${{ steps.image_meta.outputs.tag }}
+          image: edwardsalinas/calendar-${{ matrix.service }}:${{ needs.generate-tag.outputs.image_tag }}
           fail-build: false
           severity-cutoff: high
-
-      - name: 📤 Set job outputs
-        id: set_outputs
-        run: |
-          echo "backend_image=edwardsalinas/calendar-backend:${{ steps.image_meta.outputs.tag }}" >> $GITHUB_OUTPUT
-          echo "frontend_image=edwardsalinas/calendar-frontend:${{ steps.image_meta.outputs.tag }}" >> $GITHUB_OUTPUT
-          echo "✅ Set outputs:"
-          echo "  Backend: edwardsalinas/calendar-backend:${{ steps.image_meta.outputs.tag }}"
-          echo "  Frontend: edwardsalinas/calendar-frontend:${{ steps.image_meta.outputs.tag }}"
 
   # ===== DEPLOYMENT =====
   deploy:
     name: 🚀 Deploy to ${{ needs.code-analysis.outputs.target_env }}
-    needs: [code-analysis, build-and-publish]
+    needs: [code-analysis, build-and-publish, generate-tag]
     if: needs.code-analysis.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -325,24 +328,24 @@ jobs:
       - name: 📄 Generate docker-compose.yml
         run: |
           # Validate that image variables are set
-          if [[ -z "${{ needs.build-and-publish.outputs.backend_image }}" ]]; then
+          if [[ -z "${{ needs.generate-tag.outputs.backend_image }}" ]]; then
             echo "❌ Backend image not set"
             exit 1
           fi
-          if [[ -z "${{ needs.build-and-publish.outputs.frontend_image }}" ]]; then
+          if [[ -z "${{ needs.generate-tag.outputs.frontend_image }}" ]]; then
             echo "❌ Frontend image not set"
             exit 1
           fi
           
           echo "🏗️ Generating docker-compose.yml with:"
-          echo "Backend Image: ${{ needs.build-and-publish.outputs.backend_image }}"
-          echo "Frontend Image: ${{ needs.build-and-publish.outputs.frontend_image }}"
+          echo "Backend Image: ${{ needs.generate-tag.outputs.backend_image }}"
+          echo "Frontend Image: ${{ needs.generate-tag.outputs.frontend_image }}"
           
           cat > deployment/docker-compose.yml << EOF
           version: '3.8'
           services:
             backend:
-              image: ${{ needs.build-and-publish.outputs.backend_image }}
+              image: ${{ needs.generate-tag.outputs.backend_image }}
               container_name: calendar-backend-${{ needs.code-analysis.outputs.target_env }}
               restart: unless-stopped
               env_file: .env.backend
@@ -359,10 +362,10 @@ jobs:
               labels:
                 - "environment=${{ needs.code-analysis.outputs.target_env }}"
                 - "service=backend"
-                - "version=${{ needs.build-and-publish.outputs.image_tag }}"
+                - "version=${{ needs.generate-tag.outputs.image_tag }}"
 
             frontend:
-              image: ${{ needs.build-and-publish.outputs.frontend_image }}
+              image: ${{ needs.generate-tag.outputs.frontend_image }}
               container_name: calendar-frontend-${{ needs.code-analysis.outputs.target_env }}
               restart: unless-stopped
               env_file: .env.frontend
@@ -382,7 +385,7 @@ jobs:
               labels:
                 - "environment=${{ needs.code-analysis.outputs.target_env }}"
                 - "service=frontend"
-                - "version=${{ needs.build-and-publish.outputs.image_tag }}"
+                - "version=${{ needs.generate-tag.outputs.image_tag }}"
 
           networks:
             calendar-network:
@@ -439,7 +442,7 @@ jobs:
   # ===== POST-DEPLOYMENT =====
   post-deploy:
     name: 📋 Post-Deployment Tasks
-    needs: [code-analysis, deploy]
+    needs: [code-analysis, deploy, generate-tag]
     if: needs.code-analysis.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -459,7 +462,7 @@ jobs:
           text: |
             🎉 Deployment successful!
             Environment: ${{ needs.code-analysis.outputs.target_env }}
-            Version: ${{ needs.build-and-publish.outputs.image_tag }}
+            Version: ${{ needs.generate-tag.outputs.image_tag }}
             Repository: ${{ github.repository }}
             Author: ${{ github.actor }}
         env:
