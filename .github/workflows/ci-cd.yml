@@ -209,13 +209,13 @@ jobs:
     timeout-minutes: 30
     permissions:
       packages: write
+    outputs:
+      backend_image: ${{ steps.set_outputs.outputs.backend_image }}
+      frontend_image: ${{ steps.set_outputs.outputs.frontend_image }}
+      image_tag: ${{ steps.image_meta.outputs.tag }}
     strategy:
       matrix:
         service: [backend, frontend]
-    outputs:
-      backend_image: ${{ steps.image_meta.outputs.backend_image }}
-      frontend_image: ${{ steps.image_meta.outputs.frontend_image }}
-      image_tag: ${{ steps.image_meta.outputs.tag }}
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -240,8 +240,7 @@ jobs:
           esac
           
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "backend_image=edwardsalinas/calendar-backend:$TAG" >> $GITHUB_OUTPUT
-          echo "frontend_image=edwardsalinas/calendar-frontend:$TAG" >> $GITHUB_OUTPUT
+          echo "🏷️ Generated tag: $TAG"
 
       - name: 🔧 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -285,6 +284,15 @@ jobs:
           fail-build: false
           severity-cutoff: high
 
+      - name: 📤 Set job outputs
+        id: set_outputs
+        run: |
+          echo "backend_image=edwardsalinas/calendar-backend:${{ steps.image_meta.outputs.tag }}" >> $GITHUB_OUTPUT
+          echo "frontend_image=edwardsalinas/calendar-frontend:${{ steps.image_meta.outputs.tag }}" >> $GITHUB_OUTPUT
+          echo "✅ Set outputs:"
+          echo "  Backend: edwardsalinas/calendar-backend:${{ steps.image_meta.outputs.tag }}"
+          echo "  Frontend: edwardsalinas/calendar-frontend:${{ steps.image_meta.outputs.tag }}"
+
   # ===== DEPLOYMENT =====
   deploy:
     name: 🚀 Deploy to ${{ needs.code-analysis.outputs.target_env }}
@@ -316,6 +324,20 @@ jobs:
 
       - name: 📄 Generate docker-compose.yml
         run: |
+          # Validate that image variables are set
+          if [[ -z "${{ needs.build-and-publish.outputs.backend_image }}" ]]; then
+            echo "❌ Backend image not set"
+            exit 1
+          fi
+          if [[ -z "${{ needs.build-and-publish.outputs.frontend_image }}" ]]; then
+            echo "❌ Frontend image not set"
+            exit 1
+          fi
+          
+          echo "🏗️ Generating docker-compose.yml with:"
+          echo "Backend Image: ${{ needs.build-and-publish.outputs.backend_image }}"
+          echo "Frontend Image: ${{ needs.build-and-publish.outputs.frontend_image }}"
+          
           cat > deployment/docker-compose.yml << EOF
           version: '3.8'
           services:
@@ -340,7 +362,7 @@ jobs:
                 - "version=${{ needs.build-and-publish.outputs.image_tag }}"
 
             frontend:
-              image: "${{ needs.build-and-publish.outputs.frontend_image }}"
+              image: ${{ needs.build-and-publish.outputs.frontend_image }}
               container_name: calendar-frontend-${{ needs.code-analysis.outputs.target_env }}
               restart: unless-stopped
               env_file: .env.frontend
@@ -366,6 +388,12 @@ jobs:
             calendar-network:
               driver: bridge
           EOF
+          
+          echo "✅ Generated docker-compose.yml"
+          echo "📋 Validating docker-compose.yml..."
+          cd deployment
+          docker-compose config --quiet
+          echo "✅ Docker compose file is valid"
 
       - name: 📝 Create environment files
         run: |
