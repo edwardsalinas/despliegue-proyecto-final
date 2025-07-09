@@ -1,6 +1,6 @@
 # .github/workflows/ci-cd.yml
 # Pipeline de CI/CD profesional con despliegue a múltiples ambientes
-# Incluye validaciones, seguridad, monitoreo y rollback automático
+# Incluye validaciones, seguridad, monitoreo y rollback automático mejorado
 
 name: 🚀 CI/CD Pipeline - Professional
 
