@@ -1,5 +1,5 @@
 import { addHours, differenceInSeconds } from "date-fns";
-import { act, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Swal from "sweetalert2";
 import 'sweetalert2/dist/sweetalert2.min.css'
@@ -30,7 +30,7 @@ if( getEnvVariables().VITE_MODE !== 'test' ) {
 }
 
 export const CalendarModal = () => {
-    const { isDateModalOpen, openDateModal, closeDateModal } = useUiStore();
+    const { isDateModalOpen, closeDateModal } = useUiStore();
     
     const { activeEvent, startSavingEvent } = useCalendarStore();
     const [formSubmitted, setFormSubmitted] = useState(false);

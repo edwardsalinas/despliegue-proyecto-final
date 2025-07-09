@@ -1,9 +1,7 @@
-import { Calendar, dateFnsLocalizer, Views } from "react-big-calendar";
+import { Calendar, Views } from "react-big-calendar";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 // import 'react-big-calendar/lib/addons/dragAndDrop/styles';
 
-import { addHours } from "date-fns";
-import enUS from "date-fns/locale/en-US";
 
 import { CalendarEvent, CalendarModal, FabAddNew, FabDelete, Navbar } from "../";
 import { getMessagesES, localizer } from "../../helpers";
@@ -17,11 +15,11 @@ export const CalendarPage = () => {
   const { openDateModal } = useUiStore();
   const { events, setActiveEvent, startLoadingEvents } = useCalendarStore();
 
-  const [lastView, setLastView] = useState(
+  const [lastView] = useState(
     localStorage.getItem("lastView") || "week",
   );
 
-  const eventStyleGetter = (event, start, end, isSelected) => {
+  const eventStyleGetter = (event, _start, _end, _isSelected) => {
     // console.log({event, start, end, isSelected});
 
     const isMyEvent = ( user.uid === event.user.id ) || ( user.uid === event.user.uid );
@@ -40,7 +38,7 @@ export const CalendarPage = () => {
   const [currentView, setCurrentView] = useState(lastView || Views.MONTH);
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  const onDoubleClick = (event) => {
+  const onDoubleClick = (_event) => {
     // console.log({ doubleClick: event });
     openDateModal();
   };
@@ -58,7 +56,7 @@ export const CalendarPage = () => {
 
   useEffect(() => {
     startLoadingEvents()
-  }, [])
+  }, [startLoadingEvents])
   
   return (
     <>

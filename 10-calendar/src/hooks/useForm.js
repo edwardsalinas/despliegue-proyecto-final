@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export const useForm = ( initialForm = {}, formValidations = {}) => {
   
@@ -7,7 +7,7 @@ export const useForm = ( initialForm = {}, formValidations = {}) => {
 
     useEffect(() => {
         createValidators();
-    }, [ formState ])
+    }, [ formState, createValidators ])
 
     useEffect(() => {
         setFormState( initialForm );
@@ -36,7 +36,7 @@ export const useForm = ( initialForm = {}, formValidations = {}) => {
         setFormState( initialForm );
     }
 
-    const createValidators = () => {
+    const createValidators = useCallback(() => {
         
         const formCheckedValues = {};
         
@@ -47,7 +47,7 @@ export const useForm = ( initialForm = {}, formValidations = {}) => {
         }
 
         setFormValidation( formCheckedValues );
-    }
+    }, [formState, formValidations])
 
 
 

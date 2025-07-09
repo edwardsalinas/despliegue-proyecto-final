@@ -8,7 +8,7 @@
     "start": "node index.js",
     "test": "jest --ci --watchAll=false",
     "test:unit": "jest --ci --watchAll=false",
-    "test:integration": "jest --ci --watchAll=false --testPathPattern=integration",
+    "test:integration": "jest --ci --watchAll=false --testPathPatterns=integration",
     "test:coverage": "jest --ci --watchAll=false --coverage",
     "lint": "eslint ."
   },
