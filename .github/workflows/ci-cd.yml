@@ -340,7 +340,7 @@ jobs:
                 - "version=${{ needs.build-and-publish.outputs.image_tag }}"
 
             frontend:
-              image: ${{ needs.build-and-publish.outputs.frontend_image }}
+              image: "${{ needs.build-and-publish.outputs.frontend_image }}"
               container_name: calendar-frontend-${{ needs.code-analysis.outputs.target_env }}
               restart: unless-stopped
               env_file: .env.frontend
