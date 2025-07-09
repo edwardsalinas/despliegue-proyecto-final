@@ -186,7 +186,7 @@ jobs:
 
       - name: 🧪 Run unit tests
         working-directory: ./10-calendar
-        run: yarn test:unit --watchAll=false --coverage
+        run: yarn test --coverage --watchAll=false
 
       - name: 🔗 Run E2E tests
         working-directory: ./10-calendar
