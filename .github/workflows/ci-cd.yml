@@ -207,6 +207,8 @@ jobs:
     if: needs.code-analysis.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      packages: write
     strategy:
       matrix:
         service: [backend, frontend]
