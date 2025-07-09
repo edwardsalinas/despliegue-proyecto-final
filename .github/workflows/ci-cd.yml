@@ -329,16 +329,12 @@ jobs:
         run: |
           mkdir -p deployment
           cd deployment
-      - name: 📝 Create environment files test edward
+      - name: 📝 Create environment files
         run: |
           cd deployment
-          echo "test before"
-
-          echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
-          echo "test"
-          echo "test" > .env.backend
-          echo "test frontend" > .env.frontend
-          echo "✅ Environment files created"
+          echo "entre"
+          echo "${{ secrets.DOTENV_FILE_BACKEND }}" > .env.backend
+          echo "${{ secrets.DOTENV_FILE_FRONTEND }}" > .env.frontend
       - name: 📄 Generate docker-compose.yml
         run: |
           # Validate that image variables are set
@@ -412,16 +408,25 @@ jobs:
           docker-compose config --quiet
           echo "✅ Docker compose file is valid"
 
-      - name: 📝 Create environment files
-        run: |
-          cd deployment
-          echo "test before"
+      
 
-          echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
-          echo "test"
-          echo "test" > .env.backend
-          echo "test frontend" > .env.frontend
-          echo "✅ Environment files created"
+      # - name: 📝 Create environment files
+      #   run: |
+      #     cd deployment
+
+      #     if [[ -z "${{ secrets.DOTENV_FILE_BACKEND }}" ]]; then
+      #       echo "❌ DOTENV_FILE_BACKEND is empty"
+      #       exit 1
+      #     fi
+
+      #     if [[ -z "${{ secrets.DOTENV_FILE_FRONTEND }}" ]]; then
+      #       echo "❌ DOTENV_FILE_FRONTEND is empty"
+      #       exit 1
+      #     fi
+      #     echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
+      #     echo "test" > .env.backend
+      #     echo "test frontend" > .env.frontend
+      #     echo "✅ Environment files created"
       - name: 🚀 Deploy services
         run: |
           cd deployment
