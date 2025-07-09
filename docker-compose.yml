@@ -1,31 +1,19 @@
-version: '3.8'
-
+---
+version: "3.8"
 services:
   backend:
-    # Construye la imagen usando el Dockerfile que está en la carpeta ./10-calendar-backend
     build: ./10-calendar-backend
-    # Asigna un nombre al contenedor
     container_name: calendar-backend
-    # Mapea el puerto 4000 del contenedor al puerto 4000 de la máquina host
     ports:
-      - "4000:4000"
-    # Reinicia el contenedor automáticamente si falla
+      - 4000:4000
     restart: unless-stopped
-    # Carga las variables de entorno desde el archivo .env
     env_file:
       - ./10-calendar-backend/.env
-
   frontend:
-    # Construye la imagen usando el Dockerfile que está en la carpeta ./10-calendar
     build: ./10-calendar
-    # Asigna un nombre al contenedor
     container_name: calendar-frontend
-    # Mapea el puerto 80 del contenedor al puerto 80 de la máquina host
     ports:
-      - "80:80"
-    # Define que este servicio depende del backend.
-    # Docker Compose iniciará el backend antes que el frontend.
+      - 80:80
     depends_on:
       - backend
-    # Reinicia el contenedor automáticamente si falla
     restart: unless-stopped
