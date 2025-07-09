@@ -60,7 +60,7 @@ jobs:
           push: true
           tags: edwardsalinas/calendar-backend:latest
 
-  # Job para construir y publicar la imagen del Frontend
+  # Job para construir y publicar la imagen del Fronten
   build-and-push-frontend:
     needs: build-and-push-backend
     runs-on: ubuntu-latest
