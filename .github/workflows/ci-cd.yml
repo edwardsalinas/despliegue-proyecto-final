@@ -92,6 +92,8 @@ jobs:
             echo "target_env=none" >> $GITHUB_OUTPUT
           fi
 
+          echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
+
   # ===== TESTING =====
   test-backend:
     name: 🧪 Backend Tests
@@ -417,7 +419,7 @@ jobs:
             echo "❌ DOTENV_FILE_FRONTEND is empty"
             exit 1
           fi
-          echo "${{ secrets.DOTENV_FILE_BACKEND }}"
+          echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
           echo "test" > .env.backend
           echo "test frontend" > .env.frontend
           echo "✅ Environment files created"
