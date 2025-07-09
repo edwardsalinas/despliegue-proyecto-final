@@ -329,7 +329,16 @@ jobs:
         run: |
           mkdir -p deployment
           cd deployment
+      - name: 📝 Create environment files test edward
+        run: |
+          cd deployment
+          echo "test before"
 
+          echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
+          echo "test"
+          echo "test" > .env.backend
+          echo "test frontend" > .env.frontend
+          echo "✅ Environment files created"
       - name: 📄 Generate docker-compose.yml
         run: |
           # Validate that image variables are set
@@ -406,7 +415,10 @@ jobs:
       - name: 📝 Create environment files
         run: |
           cd deployment
+          echo "test before"
+
           echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
+          echo "test"
           echo "test" > .env.backend
           echo "test frontend" > .env.frontend
           echo "✅ Environment files created"
