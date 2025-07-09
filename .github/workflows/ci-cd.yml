@@ -110,6 +110,13 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Generated tag: $TAG"
 
+      - name: 🔧 Setup Docker Compose
+        run: |
+          # Install Docker Compose
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.23.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose --version
+
       - name: 🔐 Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -192,16 +199,22 @@ jobs:
           docker-compose pull
           
           echo "⏹️ Stopping old services..."
-          docker-compose down --remove-orphans
+          docker-compose down --remove-orphans || echo "No existing services to stop"
           
           echo "🚀 Starting services..."
           docker-compose up -d
           
+          echo "⏳ Waiting for services to start..."
+          sleep 30
+          
           echo "📊 Service status:"
           docker-compose ps
           
+          echo "📋 Service logs:"
+          docker-compose logs --tail=10
+          
           echo "🧹 Cleanup old images..."
-          docker image prune -f
+          docker image prune -f || echo "No images to prune"
 
       - name: ✅ Deployment Complete
         run: |
