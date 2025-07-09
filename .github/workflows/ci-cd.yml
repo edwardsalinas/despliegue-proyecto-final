@@ -6,35 +6,35 @@ name: 🚀 CI/CD Pipeline - Professional
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
     paths-ignore:
-      - '*.md'
-      - 'docs/**'
-      - '.gitignore'
+      - "*.md"
+      - "docs/**"
+      - ".gitignore"
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
     types: [opened, synchronize, reopened]
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy'
+        description: "Environment to deploy"
         required: true
-        default: 'development'
+        default: "development"
         type: choice
         options:
           - development
           - qa
           - production
       force_deploy:
-        description: 'Force deployment (skip some validations)'
+        description: "Force deployment (skip some validations)"
         required: false
         default: false
         type: boolean
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: "20"
   DOCKER_BUILDKIT: 1
   COMPOSE_DOCKER_CLI_BUILD: 1
 
@@ -116,8 +116,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: './10-calendar-backend/package-lock.json'
+          cache: "npm"
+          cache-dependency-path: "./10-calendar-backend/package-lock.json"
 
       - name: 📦 Install dependencies
         working-directory: ./10-calendar-backend
@@ -172,8 +172,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
-          cache-dependency-path: './10-calendar/yarn.lock'
+          cache: "yarn"
+          cache-dependency-path: "./10-calendar/yarn.lock"
 
       - name: 📦 Install dependencies
         working-directory: ./10-calendar
@@ -230,11 +230,11 @@ jobs:
               fi
               ;;
           esac
-          
+
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "backend_image=edwardsalinas/calendar-backend:$TAG" >> $GITHUB_OUTPUT
           echo "frontend_image=edwardsalinas/calendar-frontend:$TAG" >> $GITHUB_OUTPUT
-          
+
           echo "🏷️ Generated tag: $TAG"
           echo "📦 Backend image: edwardsalinas/calendar-backend:$TAG"
           echo "📦 Frontend image: edwardsalinas/calendar-frontend:$TAG"
@@ -336,11 +336,11 @@ jobs:
             echo "❌ Frontend image not set"
             exit 1
           fi
-          
+
           echo "🏗️ Generating docker-compose.yml with:"
           echo "Backend Image: ${{ needs.generate-tag.outputs.backend_image }}"
           echo "Frontend Image: ${{ needs.generate-tag.outputs.frontend_image }}"
-          
+
           cat > deployment/docker-compose.yml << EOF
           version: '3.8'
           services:
@@ -391,7 +391,7 @@ jobs:
             calendar-network:
               driver: bridge
           EOF
-          
+
           echo "✅ Generated docker-compose.yml"
           echo "📋 Validating docker-compose.yml..."
           cd deployment
@@ -404,33 +404,50 @@ jobs:
           echo "${{ secrets.DOTENV_FILE_BACKEND }}" > .env.backend
           echo "${{ secrets.DOTENV_FILE_FRONTEND }}" > .env.frontend
 
+      - name: 📝 Create environment files
+        run: |
+          cd deployment
+      
+          if [[ -z "${{ secrets.DOTENV_FILE_BACKEND }}" ]]; then
+            echo "❌ DOTENV_FILE_BACKEND is empty"
+            exit 1
+          fi
+      
+          if [[ -z "${{ secrets.DOTENV_FILE_FRONTEND }}" ]]; then
+            echo "❌ DOTENV_FILE_FRONTEND is empty"
+            exit 1
+          fi
+      
+          echo "${{ secrets.DOTENV_FILE_BACKEND }}" > .env.backend
+          echo "${{ secrets.DOTENV_FILE_FRONTEND }}" > .env.frontend
+          echo "✅ Environment files created"
       - name: 🚀 Deploy services
         run: |
           cd deployment
-          
+
           echo "🔄 Pulling latest images..."
           docker-compose pull
-          
+
           echo "⏹️  Stopping old services..."
           docker-compose down --remove-orphans
-          
+
           echo "🚀 Starting new services..."
           docker-compose up -d
-          
+
           echo "⏳ Waiting for services to be healthy..."
           timeout 300 bash -c 'until docker-compose ps | grep -q "healthy"; do sleep 10; done'
 
       - name: 🔍 Verify deployment
         run: |
           cd deployment
-          
+
           echo "📊 Service status:"
           docker-compose ps
-          
+
           echo "🔍 Health check results:"
           docker-compose logs --tail=10 backend
           docker-compose logs --tail=10 frontend
-          
+
           echo "✅ Deployment verification complete"
 
       - name: 🧹 Cleanup old images
@@ -496,7 +513,7 @@ jobs:
           echo "🔄 Initiating rollback procedure..."
           echo "This would restore the previous stable version"
           echo "Implementation depends on your deployment strategy"
-          
+
           # Example rollback logic:
           # 1. Get previous stable tag from registry
           # 2. Update docker-compose.yml with previous tag
