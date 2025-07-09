@@ -440,8 +440,7 @@ jobs:
           echo "🚀 Starting new services..."
           docker-compose up -d
 
-          echo "⏳ Waiting for services to be healthy..."
-          timeout 300 bash -c 'until docker-compose ps | grep -q "healthy"; do sleep 10; done'
+
 
       - name: 🔍 Verify deployment
         run: |
