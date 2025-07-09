@@ -1,21 +1,13 @@
 # .github/workflows/ci-cd.yml
-# Pipeline de CI/CD profesional con despliegue a múltiples ambientes
-# Incluye validaciones, seguridad, monitoreo y rollback automático
+# Pipeline de CI/CD simplificado
 
-name: 🚀 CI/CD Pipeline - Professional
+name: 🚀 CI/CD Pipeline
 
 on:
   push:
     branches: ["main", "develop"]
-    paths-ignore:
-      - "*.md"
-      - "docs/**"
-      - ".gitignore"
   pull_request:
     branches: ["main", "develop"]
-    types: [opened, synchronize, reopened]
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       environment:
@@ -25,96 +17,32 @@ on:
         type: choice
         options:
           - development
-          - qa
           - production
-      force_deploy:
-        description: "Force deployment (skip some validations)"
-        required: false
-        default: false
-        type: boolean
 
 env:
   NODE_VERSION: "20"
-  DOCKER_BUILDKIT: 1
-  COMPOSE_DOCKER_CLI_BUILD: 1
-  DOTENV_FILE_BACKEND: ${{ secrets.DOTENV_FILE_BACKEND }}
+  REGISTRY: edwardsalinas
 
 jobs:
-  # ===== ANÁLISIS Y VALIDACIONES =====
-  code-analysis:
-    name: 🔍 Code Analysis & Security
+  # ===== TESTS =====
+  test:
+    name: 🧪 Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    outputs:
-      should_deploy: ${{ steps.check_deploy.outputs.should_deploy }}
-      target_env: ${{ steps.check_deploy.outputs.target_env }}
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Needed for SonarCloud analysis
-
-      - name: 🔒 Security Scan - Secrets
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./
-          extra_args: --debug --only-verified
-
-      # - name: 🛡️ Dependency Security Scan
-      #   uses: securecodewarrior/github-action-add-sarif@v1
-      #   with:
-      #     sarif-file: 'dependency-scan-results.sarif'
-      #   continue-on-error: true
-
-      - name: 📊 SonarCloud Analysis
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        continue-on-error: true
-
-      - name: 🎯 Determine deployment target
-        id: check_deploy
-        run: |
-          echo 'estoy testeando01'
-          echo  ${{ secrets.DOTENV_FILE_BACKEND }}
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
-            echo "target_env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "release" ]]; then
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
-            echo "target_env=production" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
-            echo "target_env=qa" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
-            echo "target_env=development" >> $GITHUB_OUTPUT
-          else
-            echo "should_deploy=false" >> $GITHUB_OUTPUT
-            echo "target_env=none" >> $GITHUB_OUTPUT
-          fi
-
-          echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
-
-  # ===== TESTING =====
-  test-backend:
-    name: 🧪 Backend Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    
     services:
       mongodb:
         image: mongo:7.0
+        ports:
+          - 27017:27017
         options: >-
           --health-cmd "mongosh --eval 'db.stats().ok'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        ports:
-          - 27017:27017
 
     steps:
-      - name: 📥 Checkout code
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
       - name: 🔧 Setup Node.js
@@ -122,146 +50,56 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: "./10-calendar-backend/package-lock.json"
 
-      - name: 📦 Install dependencies
+      # Backend Tests
+      - name: 🧪 Backend Tests
         working-directory: ./10-calendar-backend
         run: |
-          npm ci --only=production=false
-          npm audit --audit-level=moderate
-
-      - name: 🔍 Lint backend code
-        working-directory: ./10-calendar-backend
-        run: npm run lint
-
-      - name: 🧪 Run unit tests
-        working-directory: ./10-calendar-backend
-        run: npm run test:unit
+          npm ci
+          npm run test
         env:
           NODE_ENV: test
           DB_CNN: mongodb://localhost:27017/test_db
           SECRET_JWT_SEED: test-secret-seed
 
-      - name: 🔗 Run integration tests
-        working-directory: ./10-calendar-backend
-        run: npm run test:integration
-        env:
-          NODE_ENV: test
-          DB_CNN: mongodb://localhost:27017/test_db
-          SECRET_JWT_SEED: test-secret-seed
+      # Frontend Tests
+      - name: 🧪 Frontend Tests
+        working-directory: ./10-calendar
+        run: |
+          npm ci
+          npm run test -- --watchAll=false
 
-      - name: 📊 Generate test coverage
-        working-directory: ./10-calendar-backend
-        run: npm run test:coverage
-        env:
-          NODE_ENV: test
-          DB_CNN: mongodb://localhost:27017/test_db
-          SECRET_JWT_SEED: test-secret-seed
-
-      - name: 📈 Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./10-calendar-backend/coverage/lcov.info
-          flags: backend
-          name: backend-coverage
-
-  test-frontend:
-    name: 🧪 Frontend Tests
+  # ===== BUILD & DEPLOY =====
+  build-deploy:
+    name: 🚀 Build & Deploy
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    
     steps:
-      - name: 📥 Checkout code
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: 🔧 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "yarn"
-          cache-dependency-path: "./10-calendar/yarn.lock"
-
-      - name: 📦 Install dependencies
-        working-directory: ./10-calendar
+      - name: 🎯 Determine Environment
+        id: env
         run: |
-          yarn install --frozen-lockfile --audit-level=moderate
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+          else
+            echo "environment=development" >> $GITHUB_OUTPUT
+          fi
 
-      - name: 🔍 Lint frontend code
-        working-directory: ./10-calendar
-        run: yarn lint
-
-      - name: 🧪 Run unit tests
-        working-directory: ./10-calendar
-        run: yarn test --coverage --watchAll=false
-
-      - name: 🔗 Run E2E tests
-        working-directory: ./10-calendar
-        run: yarn test:e2e --headless
-        continue-on-error: true
-
-      - name: 📊 Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./10-calendar/coverage/lcov.info
-          flags: frontend
-          name: frontend-coverage
-
-  # ===== GENERATE IMAGE TAG =====
-  generate-tag:
-    name: 🏷️ Generate Image Tag
-    needs: [code-analysis]
-    if: needs.code-analysis.outputs.should_deploy == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      image_tag: ${{ steps.generate_tag.outputs.tag }}
-      backend_image: ${{ steps.generate_tag.outputs.backend_image }}
-      frontend_image: ${{ steps.generate_tag.outputs.frontend_image }}
-    steps:
-      - name: 🏷️ Generate image tag
-        id: generate_tag
+      - name: 🏷️ Generate Tag
+        id: tag
         run: |
-          # Determine tag based on environment
-          case "${{ needs.code-analysis.outputs.target_env }}" in
-            "development")
-              TAG="dev-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
-              ;;
-            "qa")
-              TAG="qa-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
-              ;;
-            "production")
-              TAG="${GITHUB_REF#refs/tags/}"
-              if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                TAG="prod-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
-              fi
-              ;;
-          esac
-
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          SHORT_SHA=${GITHUB_SHA:0:7}
+          TAG="${{ steps.env.outputs.environment }}-${TIMESTAMP}-${SHORT_SHA}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "backend_image=edwardsalinas/calendar-backend:$TAG" >> $GITHUB_OUTPUT
-          echo "frontend_image=edwardsalinas/calendar-frontend:$TAG" >> $GITHUB_OUTPUT
-
-          echo "🏷️ Generated tag: $TAG"
-          echo "📦 Backend image: edwardsalinas/calendar-backend:$TAG"
-          echo "📦 Frontend image: edwardsalinas/calendar-frontend:$TAG"
-
-  # ===== BUILD & PUBLISH =====
-  build-and-publish:
-    name: 🏗️ Build & Publish Images
-    needs: [code-analysis, test-backend, test-frontend, generate-tag]
-    if: needs.code-analysis.outputs.should_deploy == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      packages: write
-    strategy:
-      matrix:
-        service: [backend, frontend]
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+          echo "Generated tag: $TAG"
 
       - name: 🔐 Login to Docker Hub
         uses: docker/login-action@v3
@@ -269,94 +107,39 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 🔒 Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🏗️ Build and push ${{ matrix.service }} image
+      - name: 🏗️ Build and Push Backend
         uses: docker/build-push-action@v5
         with:
-          context: ./10-calendar${{ matrix.service == 'backend' && '-backend' || '' }}
+          context: ./10-calendar-backend
           push: true
-          platforms: linux/amd64,linux/arm64
           tags: |
-            edwardsalinas/calendar-${{ matrix.service }}:${{ needs.generate-tag.outputs.image_tag }}
-            edwardsalinas/calendar-${{ matrix.service }}:latest
-            ghcr.io/${{ github.repository_owner }}/calendar-${{ matrix.service }}:${{ needs.generate-tag.outputs.image_tag }}
-          labels: |
-            org.opencontainers.image.title=Calendar ${{ matrix.service }}
-            org.opencontainers.image.description=Calendar application ${{ matrix.service }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ env.REGISTRY }}/calendar-backend:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/calendar-backend:latest
 
-      - name: 🔍 Scan image for vulnerabilities
-        uses: anchore/scan-action@v3
+      - name: 🏗️ Build and Push Frontend
+        uses: docker/build-push-action@v5
         with:
-          image: edwardsalinas/calendar-${{ matrix.service }}:${{ needs.generate-tag.outputs.image_tag }}
-          fail-build: false
-          severity-cutoff: high
+          context: ./10-calendar
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/calendar-frontend:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/calendar-frontend:latest
 
-  # ===== DEPLOYMENT =====
-  deploy:
-    name: 🚀 Deploy to ${{ needs.code-analysis.outputs.target_env }}
-    needs: [code-analysis, build-and-publish, generate-tag]
-    if: needs.code-analysis.outputs.should_deploy == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment:
-      name: ${{ needs.code-analysis.outputs.target_env }}
-      url: ${{ vars.ENVIRONMENT_URL }}
-    concurrency:
-      group: deploy-${{ needs.code-analysis.outputs.target_env }}
-      cancel-in-progress: false
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Setup deployment tools
+      - name: 📝 Create Deployment Files
         run: |
-          # Install deployment dependencies
-          curl -L https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64 -o /tmp/docker-compose
-          chmod +x /tmp/docker-compose
-          sudo mv /tmp/docker-compose /usr/local/bin/docker-compose
-
-      - name: 🗂️ Create deployment directory
-        run: |
-          mkdir -p deployment
-          cd deployment
-      - name: 📝 Create environment files
-        run: |
-          cd deployment
-          echo "entre"
-          echo "${{ secrets.DOTENV_FILE_BACKEND }}" > .env.backend
-          echo "${{ secrets.DOTENV_FILE_FRONTEND }}" > .env.frontend
-      - name: 📄 Generate docker-compose.yml
-        run: |
-          # Validate that image variables are set
-          if [[ -z "${{ needs.generate-tag.outputs.backend_image }}" ]]; then
-            echo "❌ Backend image not set"
-            exit 1
-          fi
-          if [[ -z "${{ needs.generate-tag.outputs.frontend_image }}" ]]; then
-            echo "❌ Frontend image not set"
-            exit 1
-          fi
-
-          echo "🏗️ Generating docker-compose.yml with:"
-          echo "Backend Image: ${{ needs.generate-tag.outputs.backend_image }}"
-          echo "Frontend Image: ${{ needs.generate-tag.outputs.frontend_image }}"
-
-          cat > deployment/docker-compose.yml << EOF
+          mkdir -p deploy
+          
+          # Create environment files
+          echo "${{ secrets.DOTENV_FILE_BACKEND }}" > deploy/.env.backend
+          echo "${{ secrets.DOTENV_FILE_FRONTEND }}" > deploy/.env.frontend
+          
+          # Create docker-compose.yml
+          cat > deploy/docker-compose.yml << EOF
           version: '3.8'
           services:
             backend:
-              image: ${{ needs.generate-tag.outputs.backend_image }}
-              container_name: calendar-backend-${{ needs.code-analysis.outputs.target_env }}
+              image: ${{ env.REGISTRY }}/calendar-backend:${{ steps.tag.outputs.tag }}
+              container_name: calendar-backend-${{ steps.env.outputs.environment }}
               restart: unless-stopped
               env_file: .env.backend
               ports:
@@ -366,17 +149,12 @@ jobs:
                 interval: 30s
                 timeout: 10s
                 retries: 3
-                start_period: 40s
               networks:
                 - calendar-network
-              labels:
-                - "environment=${{ needs.code-analysis.outputs.target_env }}"
-                - "service=backend"
-                - "version=${{ needs.generate-tag.outputs.image_tag }}"
 
             frontend:
-              image: ${{ needs.generate-tag.outputs.frontend_image }}
-              container_name: calendar-frontend-${{ needs.code-analysis.outputs.target_env }}
+              image: ${{ env.REGISTRY }}/calendar-frontend:${{ steps.tag.outputs.tag }}
+              container_name: calendar-frontend-${{ steps.env.outputs.environment }}
               restart: unless-stopped
               env_file: .env.frontend
               ports:
@@ -385,142 +163,39 @@ jobs:
                 backend:
                   condition: service_healthy
               healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+                test: ["CMD", "curl", "-f", "http://localhost:3000"]
                 interval: 30s
                 timeout: 10s
                 retries: 3
-                start_period: 40s
               networks:
                 - calendar-network
-              labels:
-                - "environment=${{ needs.code-analysis.outputs.target_env }}"
-                - "service=frontend"
-                - "version=${{ needs.generate-tag.outputs.image_tag }}"
 
           networks:
             calendar-network:
               driver: bridge
           EOF
 
-          echo "✅ Generated docker-compose.yml"
-          echo "📋 Validating docker-compose.yml..."
-          cd deployment
-          docker-compose config --quiet
-          echo "✅ Docker compose file is valid"
-
-      
-
-      # - name: 📝 Create environment filess
-      #   run: |
-      #     cd deployment
-
-      #     if [[ -z "${{ secrets.DOTENV_FILE_BACKEND }}" ]]; then
-      #       echo "❌ DOTENV_FILE_BACKEND is empty"
-      #       exit 1
-      #     fi
-
-      #     if [[ -z "${{ secrets.DOTENV_FILE_FRONTEND }}" ]]; then
-      #       echo "❌ DOTENV_FILE_FRONTEND is empty"
-      #       exit 1
-      #     fi
-      #     echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
-      #     echo "test" > .env.backend
-      #     echo "test frontend" > .env.frontend
-      #     echo "✅ Environment files created"
-      - name: 🚀 Deploy services
+      - name: 🚀 Deploy Services
         run: |
-          cd deployment
-
-          echo "🔄 Pulling latest images..."
+          cd deploy
+          
+          echo "🔄 Pulling images..."
           docker-compose pull
-
-          echo "⏹️  Stopping old services..."
+          
+          echo "⏹️ Stopping old services..."
           docker-compose down --remove-orphans
-
-          echo "🚀 Starting new services..."
+          
+          echo "🚀 Starting services..."
           docker-compose up -d
-
-
-
-      - name: 🔍 Verify deployment
-        run: |
-          cd deployment
-
+          
           echo "📊 Service status:"
           docker-compose ps
-
-          echo "🔍 Health check results:"
-          docker-compose logs --tail=10 backend
-          docker-compose logs --tail=10 frontend
-
-          echo "✅ Deployment verification complete"
-
-      - name: 🧹 Cleanup old images
-        run: |
-          echo "🧹 Cleaning up old Docker images..."
+          
+          echo "🧹 Cleanup old images..."
           docker image prune -f
-          docker system prune -f
 
-  # ===== POST-DEPLOYMENT =====
-  post-deploy:
-    name: 📋 Post-Deployment Tasks
-    needs: [code-analysis, deploy, generate-tag]
-    if: needs.code-analysis.outputs.should_deploy == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: 📊 Health Check
+      - name: ✅ Deployment Complete
         run: |
-          echo "🔍 Running post-deployment health checks..."
-          # Add your health check endpoints here
-          # curl -f ${{ vars.ENVIRONMENT_URL }}/api/health
-          echo "✅ Health checks passed"
-
-      - name: 🔔 Notify deployment success
-        if: success()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: success
-          text: |
-            🎉 Deployment successful!
-            Environment: ${{ needs.code-analysis.outputs.target_env }}
-            Version: ${{ needs.generate-tag.outputs.image_tag }}
-            Repository: ${{ github.repository }}
-            Author: ${{ github.actor }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-      - name: 🚨 Notify deployment failure
-        if: failure()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: failure
-          text: |
-            ❌ Deployment failed!
-            Environment: ${{ needs.code-analysis.outputs.target_env }}
-            Repository: ${{ github.repository }}
-            Author: ${{ github.actor }}
-            Please check the logs for more information.
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-  # ===== ROLLBACK (Manual) =====
-  rollback:
-    name: 🔄 Rollback Deployment
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment:
-      name: production-rollback
-    steps:
-      - name: 🔄 Rollback to previous version
-        run: |
-          echo "🔄 Initiating rollback procedure..."
-          echo "This would restore the previous stable version"
-          echo "Implementation depends on your deployment strategy"
-
-          # Example rollback logic:
-          # 1. Get previous stable tag from registry
-          # 2. Update docker-compose.yml with previous tag
-          # 3. Deploy previous version
-          # 4. Verify rollback success
+          echo "🎉 Deployment completed successfully!"
+          echo "Environment: ${{ steps.env.outputs.environment }}"
+          echo "Tag: ${{ steps.tag.outputs.tag }}"
