@@ -76,7 +76,7 @@ jobs:
         id: check_deploy
         run: |
           echo 'estoy testeando01'
-          echo  "${{ secrets.DOTENV_FILE_BACKEND }}"
+          echo  ${{ secrets.DOTENV_FILE_BACKEND }}
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "should_deploy=true" >> $GITHUB_OUTPUT
             echo "target_env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
