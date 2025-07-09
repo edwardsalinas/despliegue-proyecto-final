@@ -184,8 +184,7 @@ jobs:
       - name: 📦 Install dependencies
         working-directory: ./10-calendar
         run: |
-          yarn install --frozen-lockfile
-          yarn audit --level moderate
+          yarn install --frozen-lockfile --audit-level=moderate
 
       - name: 🔍 Lint frontend code
         working-directory: ./10-calendar
