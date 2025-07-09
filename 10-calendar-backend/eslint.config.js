@@ -12,9 +12,10 @@ module.exports = [
   },
   pluginJs.configs.recommended,
   {
-    files: ["tests/**/*.js"],
+    files: ["tests/**/*.js", "**/*.test.js", "**/*.spec.js", "jest.setup.js"],
     languageOptions: {
       globals: {
+        ...globals.node,
         ...globals.jest,
       },
     },
